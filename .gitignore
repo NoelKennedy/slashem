@@ -14,3 +14,10 @@ data
 *~
 .#*
 .sbtlib
+
+# IntelliJ
+*.eml
+*.iml
+*.ipr
+*.iws
+.idea
