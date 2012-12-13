@@ -48,6 +48,7 @@ import org.jboss.netty.handler.codec.http.{DefaultHttpRequest, HttpResponseStatu
 import org.joda.time.DateTime
 import scala.annotation.tailrec
 import scalaj.collection.Imports._
+import org.omg.DynamicAny._DynValueStub
 
 /**
  * SolrResponseException class that extends RuntimeException
@@ -93,23 +94,17 @@ case class Response[T <: Record[T], Y](schema: T, creator: Option[Response.RawDo
       val doc: Map[String, Any] = fd._1
       val matchingHighlights: Option[Map[String, ArrayList[String]]] = fd._2
       val q: T = B.meta.createRecord
-      doc.foreach(a => {
-        val fname = a._1
-        val value = a._2
-        q.fieldByName(fname).map(field => {
-          matchingHighlights match {
-            case Some(mhl) if (mhl.contains(fname)) => {
-              field match {
-                case f: SlashemField[_,_] => f.setHighlighted(mhl.get(fname).get.asScala.toList)
-                case _ => None
-              }
-            }
-            case _ => None
+      //set Record fields' values to match Lucene's results
+      doc.foreach {case (fname,value) => q.fieldByName(fname).foreach(field => field.setFromAny(value))}
+      matchingHighlights.foreach(mhl => {
+        //do any highlighting that was requested
+        mhl.foreach{case (fname,highlights) => {
+            val field: Box[Field[_, T]] = q.fieldByName(fname)
+            field.collect{case f: SlashemField[_,_] => f.setHighlighted(highlights.asScala.toList)}
           }
-          field.setFromAny(value)
-        })
+        }
       })
-      q.asInstanceOf[T]
+      q
     }).toList
   }
 
