@@ -48,6 +48,7 @@ import org.jboss.netty.handler.codec.http.{DefaultHttpRequest, HttpResponseStatu
 import org.joda.time.DateTime
 import scala.annotation.tailrec
 import scalaj.collection.Imports._
+import org.jboss.netty.buffer.ChannelBuffers
 
 /**
  * SolrResponseException class that extends RuntimeException
@@ -267,7 +268,7 @@ trait ElasticMeta[T <: Record[T]] extends SlashemMeta[T] {
 }
 
 /** Solr MetaRecord */
-trait SolrMeta[T <: Record[T]] extends SlashemMeta[T] {
+trait SolrMeta[T <: Record[T]] extends SlashemMeta[T] with SolrHttp {
   self: MetaRecord[T] with T =>
 
   /** The servers is a list used in round-robin for running solr read queries against.
@@ -387,15 +388,6 @@ trait SolrMeta[T <: Record[T]] extends SlashemMeta[T] {
     }
   }
 
-  def queryString(params: Seq[(String, String)]): QueryStringEncoder = {
-    val qse = new QueryStringEncoder(queryPath)
-    qse.addParam("wt", "json")
-    params.foreach( x => {
-      qse.addParam(x._1, x._2)
-    })
-    qse
-  }
-
   object NoopFilter extends SimpleFilter[HttpRequest, HttpResponse] {
     def apply(request: HttpRequest, service: Service[HttpRequest, HttpResponse]) = service(request)
   }
@@ -407,11 +399,10 @@ trait SolrMeta[T <: Record[T]] extends SlashemMeta[T] {
   // This method performs the actually query / http request. It should probably
   // go in another file when it gets more sophisticated.
   def rawQueryFuture(params: Seq[(String, String)], logFilter: SimpleFilter[HttpRequest, HttpResponse]): Future[String] = {
-    // Ugly
-    val qse = queryString(params ++
-                      logger.queryIdToken.map("magicLoggingToken" -> _).toList)
+    val request = makeHttpGetRequest(params)
 
-    val request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, qse.toString)
+    println(request.getUri)
+
     // Here be dragons! If you have multiple backends with shared IPs this could very well explode
     // but finagle doesn't seem to properly set the http host header for http/1.1
     request.addHeader(HttpHeaders.Names.HOST, servers.head)
@@ -419,11 +410,10 @@ trait SolrMeta[T <: Record[T]] extends SlashemMeta[T] {
     (loggedClient(request)).map(response => {
       response.getStatus match {
         case HttpResponseStatus.OK => response.getContent.toString(CharsetUtil.UTF_8)
-        case status => throw SolrResponseException(status.getCode, status.getReasonPhrase, solrName, qse.toString)
+        case status => throw SolrResponseException(status.getCode, status.getReasonPhrase, solrName, request.getUri) //ToDo : Use of uri not exactly correct here, won't show up the params on an http post
       }
     })
   }
-
 }
 
 /** Logging and Timing solr trait */
@@ -893,7 +883,7 @@ trait SolrSchema[M <: Record[M]] extends SlashemSchema[M] {
                      fallOf: Option[Double],
                      min: Option[Int]): Future[SearchResults[M, Y]] = {
     val queryName = meta.solrName + ".query"
-    val queryText = meta.queryString(params).toString
+    val queryText = meta.queryString(params).toString  //ToDo: Assumption here that the querystring is used, it seems to be used for logging after here
 
     val logFilter = new SimpleFilter[HttpRequest, HttpResponse] {
       def apply(request: HttpRequest, service: Service[HttpRequest, HttpResponse]) = {
