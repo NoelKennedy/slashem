@@ -1,11 +1,13 @@
 package com.foursquare.slashem
 
-import com.twitter.finagle.{Service, SimpleFilter}
 import org.jboss.netty.handler.codec.http._
-import com.twitter.util.Future
 import org.jboss.netty.util.CharsetUtil
 import org.jboss.netty.buffer.ChannelBuffers
 
+
+sealed abstract class HttpVerb
+case object HttpPost extends HttpVerb
+case object HttpGet extends HttpVerb
 
 trait SolrHttp {
 
@@ -71,7 +73,7 @@ trait SolrHttp {
 //    val qse = queryString(params ++
 //      logger.queryIdToken.map("magicLoggingToken" -> _).toList)
 //
-//    val request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpMethod.GET, qse.toString)
+//    val request = new DefaultHttpRequest(HttpVersion.HTTP_1_1, HttpVerb.GET, qse.toString)
 //    // Here be dragons! If you have multiple backends with shared IPs this could very well explode
 //    // but finagle doesn't seem to properly set the http host header for http/1.1
 //    request.addHeader(HttpHeaders.Names.HOST, servers.head)
