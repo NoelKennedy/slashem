@@ -393,13 +393,16 @@ trait SolrMeta[T <: Record[T]] extends SlashemMeta[T] with SolrHttp {
   }
 
   def rawQueryFuture(params: Seq[(String, String)]): Future[String] = {
-    rawQueryFuture(params, NoopFilter)
+    rawQueryFuture(params, NoopFilter, HttpGet)
   }
 
   // This method performs the actually query / http request. It should probably
   // go in another file when it gets more sophisticated.
-  def rawQueryFuture(params: Seq[(String, String)], logFilter: SimpleFilter[HttpRequest, HttpResponse]): Future[String] = {
-    val request = makeHttpGetRequest(params)
+  def rawQueryFuture(params: Seq[(String, String)], logFilter: SimpleFilter[HttpRequest, HttpResponse], httpVerb:HttpVerb): Future[String] = {
+    val request = httpVerb match {
+      case HttpGet => makeHttpGetRequest(params)
+      case HttpPost => makeHttpPostRequest(params)
+    }
 
     println(request.getUri)
 
@@ -876,12 +879,19 @@ trait SolrSchema[M <: Record[M]] extends SlashemSchema[M] {
   Future[SearchResults[M, Y]] = {
     solrQueryFuture(qb.creator, queryParams(qb), qb.fieldsToFetch, qb.fallOf, qb.min)
   }
+
+  def queryFuture[Ord, Lim, MM <: MinimumMatchType, Y, H <: Highlighting, Q <: QualityFilter, FC <: FacetCount, FLim, ST <: ScoreType](qb: QueryBuilder[M, Ord, Lim, MM, Y, H, Q, FC, FLim, ST], httpVerb:HttpVerb):
+  Future[SearchResults[M, Y]] = {
+    solrQueryFuture(qb.creator, queryParams(qb), qb.fieldsToFetch, qb.fallOf, qb.min, httpVerb)
+  }
+
   //The query builder calls into this to do actually execute the query.
   def solrQueryFuture[Y](creator: Option[Response.RawDoc => Y],
                      params: Seq[(String, String)],
                      fieldstofetch: List[String],
                      fallOf: Option[Double],
-                     min: Option[Int]): Future[SearchResults[M, Y]] = {
+                     min: Option[Int],
+                     httpVerb:HttpVerb = HttpGet): Future[SearchResults[M, Y]] = {
     val queryName = meta.solrName + ".query"
     val queryText = meta.queryString(params).toString  //ToDo: Assumption here that the querystring is used, it seems to be used for logging after here
 
@@ -894,7 +904,7 @@ trait SolrSchema[M <: Record[M]] extends SlashemSchema[M] {
       }
     }
 
-    timeFuture(meta.rawQueryFuture(params, logFilter)).map({
+    timeFuture(meta.rawQueryFuture(params, logFilter, httpVerb)).map({
       case (queryTime, jsonString) => {
         meta.logger.log(queryName, queryText, queryTime)
         jsonString
