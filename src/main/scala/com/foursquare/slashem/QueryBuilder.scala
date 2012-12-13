@@ -378,36 +378,31 @@ case class QueryBuilder[M <: Record[M], Ord, Lim, MM <: MinimumMatchType, Y, H <
   }
 
   /** Fetch the results for a given query (blocking)*/
-  def fetch(httpVerb:HttpVerb = HttpGet):  SearchResults[M, Y] = {
+  def fetch():  SearchResults[M, Y] = {
     // Gross++
-    fetch(Duration(meta.meta.timeout, TimeUnit.SECONDS), httpVerb)
+    fetch(Duration(meta.meta.timeout, TimeUnit.SECONDS))
   }
-  /** Fetch the results for a given query (blocking) with a specified timeout.  Defaults to using http get*/
+  /** Fetch the results for a given query (blocking) with a specified timeout*/
   def fetch(timeout: Duration):  SearchResults[M, Y] = {
-    fetch(timeout, HttpGet)
-  }
-
-  /** Fetch the results for a given query (blocking) with a specified timeout and http verb*/
-  def fetch(timeout: Duration, httpVerb:HttpVerb):  SearchResults[M, Y] = {
     // Gross++
-    meta.query(timeout, this, httpVerb)
+    meta.query(timeout, this)
   }
   /** Fetch the results for a given query (non-blocking)*/
-  def fetchFuture(httpVerb:HttpVerb = HttpGet): Future[SearchResults[M,Y]] = {
-    meta.queryFuture(this, httpVerb)
+  def fetchFuture(): Future[SearchResults[M,Y]] = {
+    meta.queryFuture(this)
   }
   /** Call fetchBatch when you need a large number of results from SOLR.
    * Usage example: val res = (SVenue where (_.default eqs "coffee") start(10) limit(40) fetchBatch(10)) {_.response.oids }
    * @param batchSize The size of the batch to be retrieved
    * @param f A function to be applied over the result batches */
-  def fetchBatch[T](batchSize: Int, timeout: Duration = Duration(1, TimeUnit.SECONDS),httpVerb:HttpVerb = HttpGet)
+  def fetchBatch[T](batchSize: Int, timeout: Duration = Duration(1, TimeUnit.SECONDS))
   (f: SearchResults[M,Y] => List[T]): List[T] =  {
     val startPos: Long = this.start.getOrElse(DefaultStart)
     val maxRowsToGet: Option[Long] = this.limit//If not specified try to get all rows
     //There is somewhat of a race condition here. If data is being inserted or deleted during the query
     //some results may not appear and some results may be duplicated.
     val firstQB = this.start(startPos).copy(limit=Some(batchSize))
-    val firstQuery = meta.query(timeout,firstQB, httpVerb)
+    val firstQuery = meta.query(timeout,firstQB)
     val maxResults = firstQuery.response.numFound - firstQuery.response.start
     val rowsToGet: Long = maxRowsToGet.map(scala.math.min(_,maxResults)) getOrElse maxResults
     // Now make rowsToGet/batchSizes calls to meta.query
@@ -416,7 +411,7 @@ case class QueryBuilder[M <: Record[M], Ord, Lim, MM <: MinimumMatchType, Y, H <
       // cannot simply override this.start as it is a val, so removing/adding on queryParams
       val starti = startPos + (i*batchSize)
       val currentQB = this.start(starti).copy(limit=Some(batchSize))
-      f(meta.query(timeout, currentQB, httpVerb))
+      f(meta.query(timeout, currentQB))
     }.toList
   }
    //Auto generated code, is there a better way to do this?
